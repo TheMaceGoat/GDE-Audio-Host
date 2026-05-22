@@ -149,12 +149,17 @@
         return;
       }
 
-      const file = fileInput.files[0];
+      // FIX 1: Explicitly grab the first selected file item object
+      const targetFile = fileInput.files[0];
       setMessage('Uploading directly to cloud storage...', 'info');
 
       try {
-        // 1. Upload directly from browser to Vercel Blob using token security handshake
-        const blob = await window.vercelBlob.upload(file.name, file, {
+        // FIX 2: Correct capitalized reference to window.VercelBlob
+        if (!window.VercelBlob || !window.VercelBlob.upload) {
+          throw new Error('Vercel Blob storage client library failed to initialize correctly.');
+        }
+
+        const blob = await window.VercelBlob.upload(targetFile.name, targetFile, {
           access: 'public',
           handleUploadUrl: '/api/upload',
         });
@@ -166,9 +171,9 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            originalName: file.name,
-            size: file.size,
-            mimeType: file.type || 'audio/mpeg',
+            originalName: targetFile.name,
+            size: targetFile.size,
+            mimeType: targetFile.type || 'audio/mpeg',
             url: blob.url
           })
         });
@@ -182,7 +187,7 @@
         result.classList.remove('hidden');
         setMessage(data.duplicate ? 'This file already exists; using the existing link.' : 'Upload complete! Your URL is ready.', 'success');
         
-        // Reset form file picking selection
+        // Reset form selection
         form.reset();
         await fetchUploads();
       } catch (error) {
