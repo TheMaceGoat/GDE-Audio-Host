@@ -1,27 +1,13 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const cors = require('cors');
+const { put, del } = require('@vercel/blob');
+const { Redis } = require('@upstash/redis');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const uploadsDir = path.join(__dirname, 'uploads');
-const metadataPath = path.join(__dirname, 'uploads-meta.json');
-fs.mkdirSync(uploadsDir, { recursive: true });
 
-let uploadsMetadata = [];
-if (fs.existsSync(metadataPath)) {
-  try {
-    uploadsMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8')) || [];
-  } catch (error) {
-    uploadsMetadata = [];
-  }
-}
-
-const saveMetadata = () => {
-  fs.writeFileSync(metadataPath, JSON.stringify(uploadsMetadata, null, 2));
-};
+// Automatically connects using the environment variables injected by Vercel
+const redis = Redis.fromEnv();
 
 const storage = multer.memoryStorage();
 
@@ -38,94 +24,112 @@ const audioFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter: audioFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }
+  limits: { fileSize: 4.5 * 1024 * 1024 } // Vercel payload limit constraint
 });
 
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(uploadsDir, { maxAge: '1d' }));
 
-app.get('/uploads.json', (req, res) => {
-  res.json(uploadsMetadata);
+// Fetch metadata array from Upstash Redis
+app.get('/uploads.json', async (req, res) => {
+  try {
+    const uploadsMetadata = await redis.get('uploadsMetadata') || [];
+    res.json(uploadsMetadata);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve metadata.' });
+  }
 });
 
-app.post('/upload', upload.single('audio'), (req, res) => {
+// Upload endpoint
+app.post('/upload', upload.single('audio'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No audio file uploaded.' });
   }
 
-  const duplicate = uploadsMetadata.find((item) => {
-    return item.originalName === req.file.originalname && item.size === req.file.size && item.mimeType === req.file.mimetype;
-  });
+  try {
+    const uploadsMetadata = await redis.get('uploadsMetadata') || [];
 
-  if (duplicate) {
-    return res.json({
-      url: duplicate.url,
-      name: duplicate.originalName,
-      size: duplicate.size,
-      uploadedAt: duplicate.uploadedAt,
-      duplicate: true
+    // Check for exact duplicates
+    const duplicate = uploadsMetadata.find((item) => {
+      return item.originalName === req.file.originalname && item.size === req.file.size && item.mimeType === req.file.mimetype;
     });
+
+    if (duplicate) {
+      return res.json({
+        url: duplicate.url,
+        name: duplicate.originalName,
+        size: duplicate.size,
+        uploadedAt: duplicate.uploadedAt,
+        duplicate: true
+      });
+    }
+
+    // Stream directly from RAM buffer to Vercel Blob
+    const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
+    const blob = await put(`uploads/${safeName}`, req.file.buffer, {
+      access: 'public',
+      contentType: req.file.mimetype
+    });
+
+    const uploadedAt = new Date().toISOString();
+
+    const entry = {
+      id: safeName,
+      filename: safeName,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimeType: req.file.mimetype,
+      url: blob.url,
+      uploadedAt
+    };
+
+    uploadsMetadata.unshift(entry);
+    await redis.set('uploadsMetadata', uploadsMetadata);
+
+    res.json({
+      url: blob.url,
+      name: entry.originalName,
+      size: entry.size,
+      uploadedAt: entry.uploadedAt,
+      duplicate: false
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Upload failed.' });
   }
-
-  const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
-  const outPath = path.join(uploadsDir, safeName);
-  fs.writeFileSync(outPath, req.file.buffer);
-
-  const directUrl = `${req.protocol}://${req.get('host')}/uploads/${encodeURIComponent(safeName)}`;
-  const uploadedAt = new Date().toISOString();
-
-  const entry = {
-    id: safeName,
-    filename: safeName,
-    originalName: req.file.originalname,
-    size: req.file.size,
-    mimeType: req.file.mimetype,
-    url: directUrl,
-    uploadedAt
-  };
-
-  uploadsMetadata.unshift(entry);
-  saveMetadata();
-
-  res.json({
-    url: directUrl,
-    name: entry.originalName,
-    size: entry.size,
-    uploadedAt: entry.uploadedAt,
-    duplicate: false
-  });
 });
 
-app.delete('/upload/:id', (req, res) => {
-  const fileId = path.basename(req.params.id);
-  const index = uploadsMetadata.findIndex((item) => item.id === fileId);
+// Delete endpoint
+app.delete('/upload/:id', async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    const uploadsMetadata = await redis.get('uploadsMetadata') || [];
+    const index = uploadsMetadata.findIndex((item) => item.id === fileId);
 
-  if (index === -1) {
-    return res.status(404).json({ error: 'Upload not found.' });
+    if (index === -1) {
+      return res.status(404).json({ error: 'Upload not found.' });
+    }
+
+    // Delete from cloud storage using its public URL
+    await del(uploadsMetadata[index].url);
+
+    // Remove item from database array
+    uploadsMetadata.splice(index, 1);
+    await redis.set('uploadsMetadata', uploadsMetadata);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete asset.' });
   }
-
-  const filePath = path.join(uploadsDir, uploadsMetadata[index].filename);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-
-  uploadsMetadata.splice(index, 1);
-  saveMetadata();
-
-  res.json({ success: true });
 });
 
+// Error handling middleware
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.message });
   }
   if (err) {
-    return res.status(400).json({ error: err.message || 'Upload failed.' });
+    return res.status(400).json({ error: err.message || 'An error occurred.' });
   }
   next();
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+module.exports = app;

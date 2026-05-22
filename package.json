@@ -8,6 +8,8 @@
     "tunnel": "npx localtunnel --port 3000"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "@vercel/blob": "^2.4.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "localtunnel": "^2.0.2",
