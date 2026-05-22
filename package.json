@@ -2,7 +2,7 @@
   "name": "gde-audio-host",
   "version": "0.1.0",
   "description": "Simple audio upload host for TurboWarp URL Playback.",
-  "main": "server.js",
+  "main": "api/server.js",
   "scripts": {
     "start": "node server.js",
     "tunnel": "npx localtunnel --port 3000"
