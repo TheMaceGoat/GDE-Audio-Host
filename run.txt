@@ -1,0 +1,9 @@
+cd /workspaces/GDE-Audio-Host
+
+npm start
+
+In another terminal:
+
+npm run tunnel
+
+Open the HTTPS tunnel URL shown by localtunnel, then paste that HTTPS audio URL into TurboWarp.

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDE Audio Upload Host</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>GDE Audio Upload Host</h1>
+    <p>Upload an audio file and get a direct URL you can paste into GDE</p>
+
+    <form id="upload-form">
+      <label for="audio-file">Choose audio file</label>
+      <input id="audio-file" type="file" name="audio" accept="audio/*" required />
+      <button type="submit">Upload</button>
+    </form>
+
+    <div id="result" class="hidden">
+      <p>Direct file URL:</p>
+      <input id="file-url" type="text" readonly />
+      <button id="copy-button">Copy Link</button>
+      <p class="hint">Paste this URL into GDE</p>
+    </div>
+
+    <div id="message" class="hidden"></div>
+
+    <section id="gallery-section">
+      <h2>Recent uploads</h2>
+      <div class="search-bar">
+        <input id="search-input" type="search" placeholder="Search uploads by filename..." />
+      </div>
+      <div id="upload-list" class="upload-list"></div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const result = document.getElementById('result');
+    const fileUrlInput = document.getElementById('file-url');
+    const message = document.getElementById('message');
+    const copyButton = document.getElementById('copy-button');
+    const uploadList = document.getElementById('upload-list');
+    const searchInput = document.getElementById('search-input');
+    let allUploads = [];
+
+    function setMessage(text, type = 'info') {
+      message.textContent = text;
+      message.className = type;
+      message.classList.remove('hidden');
+    }
+
+    function formatSize(size) {
+      if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+      if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${size} B`;
+    }
+
+    function timeAgo(timestamp) {
+      const diff = Date.now() - new Date(timestamp).getTime();
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      if (days >= 1) return `${days} day${days === 1 ? '' : 's'} ago`;
+      if (hours >= 1) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+      if (minutes >= 1) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+      return 'just now';
+    }
+
+    function renderUploads(uploads) {
+      if (!uploads.length) {
+        uploadList.innerHTML = '<p class="empty-list">No uploaded audio yet.</p>';
+        return;
+      }
+
+      uploadList.innerHTML = uploads.map((item) => `
+        <article class="upload-card">
+          <div class="upload-card-header">
+            <div>
+              <strong>${item.originalName}</strong>
+              <p class="upload-meta">${formatSize(item.size)} · ${timeAgo(item.uploadedAt)}</p>
+            </div>
+            <button class="copy-upload-link" data-url="${item.url}">Copy URL</button>
+          </div>
+          <audio controls preload="none" src="${item.url}"></audio>
+          <div class="upload-link-row">
+            <input type="text" readonly value="${item.url}" />
+          </div>
+        </article>
+      `).join('');
+
+      uploadList.querySelectorAll('.copy-upload-link').forEach((button) => {
+        button.addEventListener('click', () => {
+          navigator.clipboard.writeText(button.dataset.url).then(() => {
+            setMessage('Copied upload link to clipboard!', 'success');
+          }).catch(() => {
+            setMessage('Unable to copy link. Please copy manually.', 'error');
+          });
+        });
+      });
+    }
+
+    function filterUploads(query) {
+      const normalized = query.trim().toLowerCase();
+      if (!normalized) {
+        renderUploads(allUploads);
+        return;
+      }
+
+      const filtered = allUploads.filter((item) =>
+        item.originalName.toLowerCase().includes(normalized)
+      );
+
+      if (!filtered.length) {
+        uploadList.innerHTML = '<p class="empty-list">No uploads match your search.</p>';
+        return;
+      }
+
+      renderUploads(filtered);
+    }
+
+    async function fetchUploads() {
+      try {
+        const response = await fetch('/uploads.json');
+        if (!response.ok) {
+          throw new Error('Could not fetch uploads.');
+        }
+        allUploads = await response.json();
+        renderUploads(allUploads);
+      } catch (error) {
+        uploadList.innerHTML = '<p class="empty-list error">Unable to load previous uploads.</p>';
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      result.classList.add('hidden');
+      message.classList.add('hidden');
+
+      const fileInput = document.getElementById('audio-file');
+      if (!fileInput.files.length) {
+        setMessage('Please select an audio file to upload.', 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio', fileInput.files[0]);
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Upload failed.');
+        }
+
+        fileUrlInput.value = data.url;
+        result.classList.remove('hidden');
+        setMessage(data.duplicate ? 'This file already exists; using the existing link.' : 'Upload complete! Your URL is ready.', 'success');
+        await fetchUploads();
+      } catch (error) {
+        setMessage(error.message, 'error');
+      }
+    });
+
+    copyButton.addEventListener('click', () => {
+      navigator.clipboard.writeText(fileUrlInput.value).then(() => {
+        setMessage('Copied to clipboard!', 'success');
+      }).catch(() => {
+        setMessage('Unable to copy link. Please copy manually.', 'error');
+      });
+    });
+
+    searchInput.addEventListener('input', () => {
+      filterUploads(searchInput.value);
+    });
+
+    fetchUploads();
+  </script>
+</body>
+</html>
