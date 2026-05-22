@@ -134,6 +134,27 @@ button:hover {
   font-size: 0.95rem;
 }
 
+.upload-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.delete-upload-link {
+  width: fit-content;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #ef4444;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.delete-upload-link:hover {
+  background: #dc2626;
+}
+
 .upload-link-row {
   margin-top: 12px;
 }

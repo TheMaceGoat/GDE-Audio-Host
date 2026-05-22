@@ -97,6 +97,25 @@ app.post('/upload', upload.single('audio'), (req, res) => {
   });
 });
 
+app.delete('/upload/:id', (req, res) => {
+  const fileId = path.basename(req.params.id);
+  const index = uploadsMetadata.findIndex((item) => item.id === fileId);
+
+  if (index === -1) {
+    return res.status(404).json({ error: 'Upload not found.' });
+  }
+
+  const filePath = path.join(uploadsDir, uploadsMetadata[index].filename);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  uploadsMetadata.splice(index, 1);
+  saveMetadata();
+
+  res.json({ success: true });
+});
+
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.message });
