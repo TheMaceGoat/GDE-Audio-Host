@@ -14,7 +14,8 @@
     <form id="upload-form">
       <label for="audio-file">Choose audio file</label>
       <input id="audio-file" type="file" name="audio" accept="audio/*" required />
-      <button type="submit">Upload</button>
+      <!-- Disabled by default until the module script loads completely -->
+      <button id="submit-btn" type="submit" disabled>Loading Helper...</button>
     </form>
 
     <div id="result" class="hidden">
@@ -35,12 +36,11 @@
     </section>
   </main>
 
-  <!-- Notice type="module" - this allows us to use modern JavaScript imports natively in the browser -->
   <script type="module">
-    // Import the official upload tool directly from the CDN bundle
     import { upload } from 'https://unpkg.com';
 
     const form = document.getElementById('upload-form');
+    const submitBtn = document.getElementById('submit-btn');
     const result = document.getElementById('result');
     const fileUrlInput = document.getElementById('file-url');
     const message = document.getElementById('message');
@@ -48,6 +48,10 @@
     const uploadList = document.getElementById('upload-list');
     const searchInput = document.getElementById('search-input');
     let allUploads = [];
+
+    // Enable the button now that the direct upload library is ready
+    submitBtn.textContent = 'Upload';
+    submitBtn.disabled = false;
 
     function setMessage(text, type = 'info') {
       message.textContent = text;
@@ -150,12 +154,12 @@
         return;
       }
 
-      // FIX: Grab the actual file item inside the array
+      // FIX: Grab the explicit file item object [0] inside the FileList array
       const targetFile = fileInput.files[0];
       setMessage('Uploading directly to cloud storage...', 'info');
 
       try {
-        // Run the cloud direct-upload module smoothly
+        // Upload directly from browser to Vercel Blob
         const blob = await upload(targetFile.name, targetFile, {
           access: 'public',
           handleUploadUrl: '/api/upload',
