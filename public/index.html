@@ -35,6 +35,9 @@
     </section>
   </main>
 
+  <!-- Load Vercel Blob Client Library for direct browser-to-cloud file transfers -->
+  <script src="https://unpkg.com"></script>
+
   <script>
     const form = document.getElementById('upload-form');
     const result = document.getElementById('result');
@@ -146,23 +149,41 @@
         return;
       }
 
-      const formData = new FormData();
-      formData.append('audio', fileInput.files[0]);
+      const file = fileInput.files[0];
+      setMessage('Uploading directly to cloud storage...', 'info');
 
       try {
-        const response = await fetch('/upload', {
-          method: 'POST',
-          body: formData
+        // 1. Upload directly from browser to Vercel Blob using token security handshake
+        const blob = await window.vercelBlob.upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Upload failed.');
+        // 2. Pass generated cloud asset link to database endpoint to record transaction
+        const metadataResponse = await fetch('/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            originalName: file.name,
+            size: file.size,
+            mimeType: file.type || 'audio/mpeg',
+            url: blob.url
+          })
+        });
+
+        const data = await metadataResponse.json();
+        if (!metadataResponse.ok) {
+          throw new Error(data.error || 'Metadata registration failed.');
         }
 
         fileUrlInput.value = data.url;
         result.classList.remove('hidden');
         setMessage(data.duplicate ? 'This file already exists; using the existing link.' : 'Upload complete! Your URL is ready.', 'success');
+        
+        // Reset form file picking selection
+        form.reset();
         await fetchUploads();
       } catch (error) {
         setMessage(error.message, 'error');
