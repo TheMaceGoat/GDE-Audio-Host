@@ -1,9 +1,6 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/upload", "destination": "/index.js" },
-    { "source": "/uploads.json", "destination": "/index.js" },
-    { "source": "/upload/:id", "destination": "/index.js" },
-    { "source": "/(.*)", "destination": "/public/$1" }
+    { "source": "/(.*)", "destination": "/index.js" }
   ]
 }

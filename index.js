@@ -1,14 +1,12 @@
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
+const path = require('path'); // 1. Import path
 const { put, del } = require('@vercel/blob');
 const { Redis } = require('@upstash/redis');
 
 const app = express();
-
-// Automatically connects using the environment variables injected by Vercel
 const redis = Redis.fromEnv();
-
 const storage = multer.memoryStorage();
 
 const audioFilter = (req, file, cb) => {
@@ -24,12 +22,20 @@ const audioFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter: audioFilter,
-  limits: { fileSize: 4.5 * 1024 * 1024 } // Vercel payload limit constraint
+  limits: { fileSize: 4.5 * 1024 * 1024 }
 });
 
 app.use(cors());
 
-// Fetch metadata array from Upstash Redis
+// 2. Serve the 'public' folder as static assets
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 3. Explicitly serve index.html for the root route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// API Routes
 app.get('/uploads.json', async (req, res) => {
   try {
     const uploadsMetadata = await redis.get('uploadsMetadata') || [];
@@ -39,7 +45,6 @@ app.get('/uploads.json', async (req, res) => {
   }
 });
 
-// Upload endpoint
 app.post('/upload', upload.single('audio'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No audio file uploaded.' });
@@ -48,7 +53,6 @@ app.post('/upload', upload.single('audio'), async (req, res) => {
   try {
     const uploadsMetadata = await redis.get('uploadsMetadata') || [];
 
-    // Check for exact duplicates
     const duplicate = uploadsMetadata.find((item) => {
       return item.originalName === req.file.originalname && item.size === req.file.size && item.mimeType === req.file.mimetype;
     });
@@ -63,7 +67,6 @@ app.post('/upload', upload.single('audio'), async (req, res) => {
       });
     }
 
-    // Stream directly from RAM buffer to Vercel Blob
     const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
     const blob = await put(`uploads/${safeName}`, req.file.buffer, {
       access: 'public',
@@ -97,7 +100,6 @@ app.post('/upload', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Delete endpoint
 app.delete('/upload/:id', async (req, res) => {
   try {
     const fileId = req.params.id;
@@ -108,10 +110,7 @@ app.delete('/upload/:id', async (req, res) => {
       return res.status(404).json({ error: 'Upload not found.' });
     }
 
-    // Delete from cloud storage using its public URL
     await del(uploadsMetadata[index].url);
-
-    // Remove item from database array
     uploadsMetadata.splice(index, 1);
     await redis.set('uploadsMetadata', uploadsMetadata);
 
@@ -121,7 +120,6 @@ app.delete('/upload/:id', async (req, res) => {
   }
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.message });
