@@ -12,7 +12,7 @@
     <p>Upload an audio file and get a direct URL you can paste into GDE</p>
 
     <form id="upload-form">
-      <button type="button" id="choose-file-btn" class="choose-button">Choose File</button>
+      <label for="audio-file">Choose audio file</label>
       <input id="audio-file" type="file" name="audio" accept="audio/*" required />
       <button type="submit">Upload</button>
     </form>
@@ -44,24 +44,6 @@
     const uploadList = document.getElementById('upload-list');
     const searchInput = document.getElementById('search-input');
     let allUploads = [];
-
-    const chooseBtn = document.getElementById('choose-file-btn');
-    const audioFileInput = document.getElementById('audio-file');
-    const filenameCaption = document.createElement('div');
-    filenameCaption.id = 'chosen-filename';
-    filenameCaption.className = 'chosen-filename hidden';
-    chooseBtn.insertAdjacentElement('afterend', filenameCaption);
-
-    chooseBtn.addEventListener('click', () => audioFileInput.click());
-    audioFileInput.addEventListener('change', () => {
-      if (audioFileInput.files.length) {
-        filenameCaption.textContent = audioFileInput.files[0].name;
-        filenameCaption.classList.remove('hidden');
-      } else {
-        filenameCaption.textContent = '';
-        filenameCaption.classList.add('hidden');
-      }
-    });
 
     function setMessage(text, type = 'info') {
       message.textContent = text;
