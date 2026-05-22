@@ -12,7 +12,7 @@
     <p>Upload an audio file and get a direct URL you can paste into GDE</p>
 
     <form id="upload-form">
-      <label for="audio-file">Choose audio file</label>
+      <button type="button" id="choose-file-btn" class="choose-button">Choose File</button>
       <input id="audio-file" type="file" name="audio" accept="audio/*" required />
       <button type="submit">Upload</button>
     </form>
@@ -44,6 +44,24 @@
     const uploadList = document.getElementById('upload-list');
     const searchInput = document.getElementById('search-input');
     let allUploads = [];
+
+    const chooseBtn = document.getElementById('choose-file-btn');
+    const audioFileInput = document.getElementById('audio-file');
+    const filenameCaption = document.createElement('div');
+    filenameCaption.id = 'chosen-filename';
+    filenameCaption.className = 'chosen-filename hidden';
+    chooseBtn.insertAdjacentElement('afterend', filenameCaption);
+
+    chooseBtn.addEventListener('click', () => audioFileInput.click());
+    audioFileInput.addEventListener('change', () => {
+      if (audioFileInput.files.length) {
+        filenameCaption.textContent = audioFileInput.files[0].name;
+        filenameCaption.classList.remove('hidden');
+      } else {
+        filenameCaption.textContent = '';
+        filenameCaption.classList.add('hidden');
+      }
+    });
 
     function setMessage(text, type = 'info') {
       message.textContent = text;
@@ -83,7 +101,6 @@
             </div>
             <div class="upload-card-actions">
               <button class="copy-upload-link" data-url="${item.url}">Copy URL</button>
-              <button class="delete-upload-link" data-id="${item.id}">Delete</button>
             </div>
           </div>
           <audio controls preload="none" src="${item.url}"></audio>
@@ -100,27 +117,6 @@
           }).catch(() => {
             setMessage('Unable to copy link. Please copy manually.', 'error');
           });
-        });
-      });
-
-      uploadList.querySelectorAll('.delete-upload-link').forEach((button) => {
-        button.addEventListener('click', async () => {
-          const id = button.dataset.id;
-          if (!window.confirm('Delete this upload? This cannot be undone.')) {
-            return;
-          }
-
-          try {
-            const response = await fetch(`/upload/${encodeURIComponent(id)}`, { method: 'DELETE' });
-            if (!response.ok) {
-              throw new Error('Could not delete upload.');
-            }
-            setMessage('Upload deleted successfully.', 'success');
-            allUploads = allUploads.filter((item) => item.id !== id);
-            filterUploads(searchInput.value);
-          } catch (error) {
-            setMessage(error.message, 'error');
-          }
         });
       });
     }
