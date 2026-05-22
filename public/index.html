@@ -35,10 +35,11 @@
     </section>
   </main>
 
-  <!-- Load Vercel Blob Client Library for direct browser-to-cloud file transfers -->
-  <script src="https://unpkg.com"></script>
+  <!-- Notice type="module" - this allows us to use modern JavaScript imports natively in the browser -->
+  <script type="module">
+    // Import the official upload tool directly from the CDN bundle
+    import { upload } from 'https://unpkg.com';
 
-  <script>
     const form = document.getElementById('upload-form');
     const result = document.getElementById('result');
     const fileUrlInput = document.getElementById('file-url');
@@ -149,22 +150,18 @@
         return;
       }
 
-      // FIX 1: Explicitly grab the first selected file item object
+      // FIX: Grab the actual file item inside the array
       const targetFile = fileInput.files[0];
       setMessage('Uploading directly to cloud storage...', 'info');
 
       try {
-        // FIX 2: Correct capitalized reference to window.VercelBlob
-        if (!window.VercelBlob || !window.VercelBlob.upload) {
-          throw new Error('Vercel Blob storage client library failed to initialize correctly.');
-        }
-
-        const blob = await window.VercelBlob.upload(targetFile.name, targetFile, {
+        // Run the cloud direct-upload module smoothly
+        const blob = await upload(targetFile.name, targetFile, {
           access: 'public',
           handleUploadUrl: '/api/upload',
         });
 
-        // 2. Pass generated cloud asset link to database endpoint to record transaction
+        // Pass generated cloud asset link to database endpoint to record transaction
         const metadataResponse = await fetch('/upload', {
           method: 'POST',
           headers: {
@@ -187,7 +184,6 @@
         result.classList.remove('hidden');
         setMessage(data.duplicate ? 'This file already exists; using the existing link.' : 'Upload complete! Your URL is ready.', 'success');
         
-        // Reset form selection
         form.reset();
         await fetchUploads();
       } catch (error) {
