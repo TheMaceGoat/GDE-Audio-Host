@@ -2,7 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
-const { del, handleUpload } = require('@vercel/blob');
+const { del } = require('@vercel/blob');
+const { handleUpload } = require('@vercel/blob/client');
 const { Redis } = require('@upstash/redis');
 
 const app = express();
