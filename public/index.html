@@ -15,7 +15,7 @@
       <label for="audio-file">Choose audio file</label>
       <input id="audio-file" type="file" name="audio" accept="audio/*" required />
       <!-- Disabled by default until the module script loads completely -->
-      <button id="submit-btn" type="submit" disabled>Loading Helper...</button>
+      <button id="submit-btn" type="submit" disabled>Loading uploader...</button>
     </form>
 
     <div id="result" class="hidden">
@@ -37,8 +37,6 @@
   </main>
 
   <script type="module">
-    import { upload } from 'https://unpkg.com';
-
     const form = document.getElementById('upload-form');
     const submitBtn = document.getElementById('submit-btn');
     const result = document.getElementById('result');
@@ -48,10 +46,7 @@
     const uploadList = document.getElementById('upload-list');
     const searchInput = document.getElementById('search-input');
     let allUploads = [];
-
-    // Enable the button now that the direct upload library is ready
-    submitBtn.textContent = 'Upload';
-    submitBtn.disabled = false;
+    let upload;
 
     function setMessage(text, type = 'info') {
       message.textContent = text;
@@ -82,33 +77,49 @@
         return;
       }
 
-      uploadList.innerHTML = uploads.map((item) => `
-        <article class="upload-card">
-          <div class="upload-card-header">
-            <div>
-              <strong>${item.originalName}</strong>
-              <p class="upload-meta">${formatSize(item.size)} · ${timeAgo(item.uploadedAt)}</p>
-            </div>
-            <div class="upload-card-actions">
-              <button class="copy-upload-link" data-url="${item.url}">Copy URL</button>
-            </div>
-          </div>
-          <audio controls preload="none" src="${item.url}"></audio>
-          <div class="upload-link-row">
-            <input type="text" readonly value="${item.url}" />
-          </div>
-        </article>
-      `).join('');
+      uploadList.replaceChildren(...uploads.map((item) => {
+        const card = document.createElement('article');
+        card.className = 'upload-card';
 
-      uploadList.querySelectorAll('.copy-upload-link').forEach((button) => {
-        button.addEventListener('click', () => {
-          navigator.clipboard.writeText(button.dataset.url).then(() => {
+        const header = document.createElement('div');
+        header.className = 'upload-card-header';
+        const details = document.createElement('div');
+        const name = document.createElement('strong');
+        name.textContent = item.originalName;
+        const meta = document.createElement('p');
+        meta.className = 'upload-meta';
+        meta.textContent = `${formatSize(item.size)} · ${timeAgo(item.uploadedAt)}`;
+        details.append(name, meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'upload-card-actions';
+        const copyButton = document.createElement('button');
+        copyButton.className = 'copy-upload-link';
+        copyButton.textContent = 'Copy URL';
+        copyButton.addEventListener('click', () => {
+          navigator.clipboard.writeText(item.url).then(() => {
             setMessage('Copied upload link to clipboard!', 'success');
           }).catch(() => {
             setMessage('Unable to copy link. Please copy manually.', 'error');
           });
         });
-      });
+        actions.append(copyButton);
+        header.append(details, actions);
+
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'none';
+        audio.src = item.url;
+        const linkRow = document.createElement('div');
+        linkRow.className = 'upload-link-row';
+        const linkInput = document.createElement('input');
+        linkInput.type = 'text';
+        linkInput.readOnly = true;
+        linkInput.value = item.url;
+        linkRow.append(linkInput);
+        card.append(header, audio, linkRow);
+        return card;
+      }));
     }
 
     function filterUploads(query) {
@@ -191,8 +202,17 @@
         form.reset();
         await fetchUploads();
       } catch (error) {
-        setMessage(error.message, 'error');
+        setMessage(error.message || 'Upload failed. Please try again.', 'error');
       }
+    });
+
+    import('https://esm.sh/@vercel/blob@2.4.0/client').then((blobClient) => {
+      upload = blobClient.upload;
+      submitBtn.textContent = 'Upload';
+      submitBtn.disabled = false;
+    }).catch(() => {
+      submitBtn.textContent = 'Uploader unavailable';
+      setMessage('Unable to load the upload helper. Please refresh and try again.', 'error');
     });
 
     copyButton.addEventListener('click', () => {
